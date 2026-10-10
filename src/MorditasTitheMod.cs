@@ -17,7 +17,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-[assembly: MelonInfo(typeof(MorditasTitheMod), "Morditas' Tithe", "0.3.0", "sengokudaikon")]
+[assembly: MelonInfo(typeof(MorditasTitheMod), "Morditas' Tithe", "0.3.1", "sengokudaikon")]
 [assembly: MelonGame("Eleventh Hour Games", "Last Epoch")]
 
 namespace MorditasTithe;
@@ -144,14 +144,18 @@ public sealed class MorditasTitheMod : MelonMod {
     }
 
     // A zone is one loaded instance of the active scene: the handle changes on every load, even of the same scene. What
-    // kind of zone it is comes from the game's own scene list.
+    // kind of zone it is comes from the game's own scene list, which the game loads after its first scenes (splash, login);
+    // until then a zone counts as a hub and is classified once the list is there.
     private static void Poll() {
         Scene scene = SceneManager.GetActiveScene();
         if (scene.handle != _sceneHandle) {
             _sceneHandle = scene.handle;
             Finish();
-            _run = new ZoneRun(scene.name, KindOf(scene, out string zoneName)) { ZoneName = zoneName };
-            MelonLogger.Msg($"Zone {scene.name} ({_run.Kind}{(zoneName != null ? $", {zoneName}" : string.Empty)})");
+            _run = new ZoneRun(scene.name);
+        }
+
+        if (!_run.Classified) {
+            ClassifyZone(scene);
         }
 
         Subscribe();
@@ -186,6 +190,25 @@ public sealed class MorditasTitheMod : MelonMod {
         if (_run.ObjectiveSeconds == null && echo != null && echo.gameObject.scene.handle == _sceneHandle && echo.objectiveComplete) {
             _run.ObjectiveSeconds = _run.Seconds;
         }
+    }
+
+    // SceneList.instance is the field itself: reading it does not trip the game's guard that SceneList's methods throw
+    // from before it is loaded. A scene the list cannot describe stays a hub rather than stopping the mod.
+    private static void ClassifyZone(Scene scene) {
+        if (SceneList.instance == null) {
+            return;
+        }
+
+        _run.Classified = true;
+        try {
+            _run.Kind = KindOf(scene, out string zoneName);
+            _run.ZoneName = zoneName;
+        } catch (Exception exception) {
+            MelonLogger.Warning($"Zone {scene.name} could not be classified, so it counts as a hub: {exception.Message}");
+            return;
+        }
+
+        MelonLogger.Msg($"Zone {scene.name} ({_run.Kind}{(_run.ZoneName != null ? $", {_run.ZoneName}" : string.Empty)})");
     }
 
     // Towns, the End of Time, Traveler's Rest and the like are hubs: nothing is timed or counted there.
@@ -807,13 +830,13 @@ internal enum KillKind {
 }
 
 internal sealed class ZoneRun {
-    public ZoneRun(string scene, ZoneKind kind) {
+    public ZoneRun(string scene) {
         Scene = scene;
-        Kind = kind;
     }
 
     public string Scene { get; }
-    public ZoneKind Kind { get; }
+    public ZoneKind Kind { get; set; } = ZoneKind.Hub;
+    public bool Classified { get; set; }
     public bool IsEcho => Kind == ZoneKind.Echo;
     public bool LookedUpRun { get; set; }
     public int EventKills { get; set; }
