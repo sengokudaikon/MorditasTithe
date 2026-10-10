@@ -1,14 +1,25 @@
-# Echo Tracker
+# Morditas' Tithe
 
 A MelonLoader mod for Last Epoch 1.5 that counts your kills and times each zone, with per-echo stats in the Monolith.
 
-- A panel (top left, F9 toggles) shows the zone under way: its time, kills and kills per minute, then magic, rare,
+- A panel (F9 shows or hides it) shows the zone under way: its time, kills and kills a minute, then magic, rare,
   champion and boss kills in the game's rarity colours, and loot lizards and deaths once there are any.
-- In an echo it also shows the timeline, the corruption and when the objective was done, plus the last echo and the
-  session's average echo time and kills.
-- Each echo you leave is appended to `UserData/EchoTracker/history.jsonl`, one JSON object per line:
-  `left`, `character`, `scene`, `timeline`, `corruption`, `empowered`, `seconds`, `objectiveSeconds` (null if the
+- In an echo it also shows the timeline, the zone, the corruption and when the objective was done, plus the last echo
+  and the session's average echo time and kills.
+- Each echo you leave is appended to `UserData/MorditasTithe/history.jsonl`, one JSON object per line: `left`,
+  `character`, `scene`, `zone`, `timeline`, `corruption`, `empowered`, `seconds`, `objectiveSeconds` (null if the
   objective was not done), `kills`, `normal`, `magic`, `rare`, `champion`, `boss`, `lizard`, `deaths`.
+
+## The panel
+
+It is sized from the screen height, so it reads the same at 1080p, 1440p and 4K. Unpinned, drag it anywhere to move it
+and drag the grip in its bottom-right corner to resize it. **PIN** in its top-right corner pins it: it stays put, the
+grip goes, and clicks on it reach the game; only **PINNED** still takes a click, to unpin it. Position and size are kept
+as shares of the screen, so they survive a change of resolution.
+
+While it takes clicks, the area carries the game's own `UIMouseListener` on an invisible uGUI rectangle, so the game
+treats it as UI and a click on the panel does not walk your character there. Text uses the game's Noto Sans and
+LastEpoch faces once the game has loaded them (the log names what it found).
 
 ## What counts
 
@@ -23,9 +34,9 @@ character's current Monolith run, and the objective time from the zone manager's
 
 ## Settings
 
-`UserData/MelonPreferences.cfg`, category `EchoTracker`: `Shown` (default true), `RecordHistory` (default true), `Left`
-and `Top` (panel position in pixels, default 16 and 160), `Width` (default 330), `FontSize` (default 14), `Opacity`
-(background, default 0.6).
+`UserData/MelonPreferences.cfg`, category `MorditasTithe`: `Shown` (default true), `Pinned` (default false),
+`Opacity` (background, default 0.8), `RecordHistory` (default true). `Left`, `Top` and `Scale` are what dragging and the
+grip set; `-1`, `-1` and `1` put the panel back where it starts.
 
 ## Build
 
@@ -33,7 +44,7 @@ Same as the other mods: the .NET SDK and a Last Epoch install where MelonLoader 
 the 1.5 CoreModule repair).
 
 ```
-dotnet build src/EchoTracker.csproj -c Release
+dotnet build src/MorditasTithe.csproj -c Release
 ```
 
 `-p:GamePath=...` or `LAST_EPOCH_PATH` overrides the game folder; `-p:DeployToGame=false` skips the copy into `Mods`.

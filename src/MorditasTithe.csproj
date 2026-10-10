@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <AssemblyName>EchoTracker</AssemblyName>
-    <RootNamespace>EchoTracker</RootNamespace>
-    <Version>0.1.0</Version>
+    <AssemblyName>MorditasTithe</AssemblyName>
+    <RootNamespace>MorditasTithe</RootNamespace>
+    <Version>0.2.0</Version>
   </PropertyGroup>
 
   <!-- Loader and game assemblies come from the install; they are never copied or committed. -->
@@ -13,6 +13,8 @@
     <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.CoreModule.dll" Private="false" />
     <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.IMGUIModule.dll" Private="false" />
     <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.UIModule.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.UI.dll" Private="false" />
     <Reference Include="$(Il2CppAssembliesPath)\Il2CppLE.dll" Private="false" />
   </ItemGroup>
 
