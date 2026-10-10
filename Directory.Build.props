@@ -1,0 +1,25 @@
+<Project>
+  <!-- Stops MSBuild from walking up into a parent checkout: this repo builds the same on its own. -->
+  <PropertyGroup>
+    <!-- MelonLoader 0.7.x runs mods on the .NET 6 runtime. -->
+    <TargetFramework>net6.0</TargetFramework>
+    <!-- The generated game assemblies carry no nullable annotations, and the compiler cannot emit them against those references. -->
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <!-- net6.0 is out of support; it is what the loader runs. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+  </PropertyGroup>
+
+  <!-- Last Epoch install with MelonLoader generated (run the game once). Override with -p:GamePath=... or the LAST_EPOCH_PATH variable. -->
+  <PropertyGroup>
+    <GamePath Condition="'$(GamePath)' == ''">$(LAST_EPOCH_PATH)</GamePath>
+    <GamePath Condition="'$(GamePath)' == ''">D:\SteamLibrary\steamapps\common\Last Epoch</GamePath>
+    <MelonLoaderPath>$(GamePath)\MelonLoader</MelonLoaderPath>
+    <Il2CppAssembliesPath>$(MelonLoaderPath)\Il2CppAssemblies</Il2CppAssembliesPath>
+  </PropertyGroup>
+</Project>

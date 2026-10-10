@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>EchoTracker</AssemblyName>
+    <RootNamespace>EchoTracker</RootNamespace>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <!-- Loader and game assemblies come from the install; they are never copied or committed. -->
+  <ItemGroup>
+    <Reference Include="$(MelonLoaderPath)\net6\MelonLoader.dll" Private="false" />
+    <Reference Include="$(MelonLoaderPath)\net6\Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\Il2Cppmscorlib.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.IMGUIModule.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\UnityEngine.TextRenderingModule.dll" Private="false" />
+    <Reference Include="$(Il2CppAssembliesPath)\Il2CppLE.dll" Private="false" />
+  </ItemGroup>
+
+  <!-- How Eterra's Blessing shows the settings: read from the DLL, so it travels with the mod. -->
+  <ItemGroup>
+    <EmbeddedResource Include="ModSettings.json" LogicalName="ModSettings.json" />
+  </ItemGroup>
+
+  <!-- Local linking until the registry exists: copy the build into the game's Mods folder. -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false' And Exists('$(GamePath)')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GamePath)\Mods" />
+  </Target>
+</Project>

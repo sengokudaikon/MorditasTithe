@@ -1,0 +1,8 @@
+# Text is checked out with CRLF everywhere (matches .editorconfig); the repository stores LF.
+* text=auto eol=crlf
+
+*.png binary
+*.ttf binary
+*.ico binary
+*.dll binary
+*.exe binary
