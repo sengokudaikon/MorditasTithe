@@ -5,8 +5,10 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using HarmonyLib;
 using Il2Cpp;
 using Il2CppInterop.Runtime;
+using Il2CppTMPro;
 using MelonLoader;
 using MelonLoader.Utils;
 using MorditasTithe;
@@ -15,7 +17,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-[assembly: MelonInfo(typeof(MorditasTitheMod), "Morditas' Tithe", "0.2.0", "sengokudaikon")]
+[assembly: MelonInfo(typeof(MorditasTitheMod), "Morditas' Tithe", "0.3.0", "sengokudaikon")]
 [assembly: MelonGame("Eleventh Hour Games", "Last Epoch")]
 
 namespace MorditasTithe;
@@ -141,14 +143,15 @@ public sealed class MorditasTitheMod : MelonMod {
         MelonLogger.Error($"Morditas' Tithe {what}: {exception}");
     }
 
-    // A zone is one loaded instance of the active scene: the handle changes on every load, even of the same scene.
+    // A zone is one loaded instance of the active scene: the handle changes on every load, even of the same scene. What
+    // kind of zone it is comes from the game's own scene list.
     private static void Poll() {
         Scene scene = SceneManager.GetActiveScene();
         if (scene.handle != _sceneHandle) {
             _sceneHandle = scene.handle;
             Finish();
-            _run = new ZoneRun(scene.name);
-            MelonLogger.Msg($"Zone {scene.name}");
+            _run = new ZoneRun(scene.name, KindOf(scene, out string zoneName)) { ZoneName = zoneName };
+            MelonLogger.Msg($"Zone {scene.name} ({_run.Kind}{(zoneName != null ? $", {zoneName}" : string.Empty)})");
         }
 
         Subscribe();
@@ -160,16 +163,14 @@ public sealed class MorditasTitheMod : MelonMod {
         if (!_run.HasPlayer) {
             _run.HasPlayer = true;
             _run.Character = PlayerFinder.getPlayerData()?.CharacterName;
-            _run.ZoneName = SceneList.GetCurrentSceneDisplayName();
-        }
-
-        MonolithZoneManager echo = MonolithZoneManager.instance;
-        if (echo == null) {
-            return;
         }
 
         if (!_run.IsEcho) {
-            _run.IsEcho = true;
+            return;
+        }
+
+        if (!_run.LookedUpRun) {
+            _run.LookedUpRun = true;
             MonolithRunsManager runs = player.monolithRunsManager;
             if (runs != null && runs.TryGetCurrentOrMostRecentlyRequestedRun(out MonolithRun monolithRun) && monolithRun != null) {
                 _run.Timeline = monolithRun.timeline?.displayName;
@@ -180,51 +181,90 @@ public sealed class MorditasTitheMod : MelonMod {
             MelonLogger.Msg($"Echo {_run.ZoneName} in {_run.Timeline ?? "an unknown timeline"}, corruption {_run.Corruption?.ToString(CultureInfo.InvariantCulture) ?? "unknown"}");
         }
 
-        if (_run.ObjectiveSeconds == null && echo.objectiveComplete) {
+        // The zone manager's instance outlives its scene for a moment: only this scene's own counts.
+        MonolithZoneManager echo = MonolithZoneManager.instance;
+        if (_run.ObjectiveSeconds == null && echo != null && echo.gameObject.scene.handle == _sceneHandle && echo.objectiveComplete) {
             _run.ObjectiveSeconds = _run.Seconds;
         }
     }
 
-    // The death event belongs to the ActorManager instance; a new one (after a reload) needs the handler again.
+    // Towns, the End of Time, Traveler's Rest and the like are hubs: nothing is timed or counted there.
+    private static ZoneKind KindOf(Scene scene, out string zoneName) {
+        SceneDetails details = SceneList.GetSceneDetails(scene);
+        zoneName = details == null ? null : string.IsNullOrEmpty(details.LocalizedName) ? details.DisplayName : details.LocalizedName;
+        if (details == null) {
+            return ZoneKind.Hub;
+        }
+
+        string name = scene.name;
+        if (details.sceneType is SceneType.Town or SceneType.NonGameplay || SceneList.IsNonCombatZone(name) || SceneList.IsMonolithRestZone(name)) {
+            return ZoneKind.Hub;
+        }
+
+        return SceneList.IsMonolithEcho(scene) ? ZoneKind.Echo : ZoneKind.Combat;
+    }
+
+    // The death event comes late (it seems to fire as the corpse is cleared, and not at all for a corpse still lying there
+    // when the zone ends), so kills are counted as the actor enters its dying state (DyingOnEnterPatch). The event is
+    // still counted alongside, for the log, until the two have been compared live.
     private static void Subscribe() {
         ActorManager manager = ActorManager.instance;
         if (manager == null || manager.Pointer == _subscribedManager) {
             return;
         }
 
-        _onActorDied ??= DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Actor, bool>>(new Action<Actor, bool>(OnActorDied));
+        _onActorDied ??= DelegateSupport.ConvertDelegate<Il2CppSystem.Action<Actor, bool>>(new Action<Actor, bool>(OnActorDiedEvent));
         manager.add_actorDiedEvent(_onActorDied);
         _subscribedManager = manager.Pointer;
     }
 
-    // Unsummoned actors (a minion or totem that expired) are not kills. Anything else hostile to the player counts,
-    // including what enemies summon, as the game's own echo progress does.
-    private static void OnActorDied(Actor dead, bool unsummoned) {
-        if (_faulted || _run == null || dead == null || unsummoned) {
+    private static void OnActorDiedEvent(Actor dead, bool unsummoned) {
+        if (_faulted || _run == null || _run.Kind == ZoneKind.Hub || dead == null || unsummoned) {
             return;
         }
 
         try {
-            Actor player = PlayerFinder.getPlayerActor();
-            if (player == null) {
-                return;
+            if (IsKill(dead)) {
+                _run.EventKills++;
             }
-
-            if (dead.Pointer == player.Pointer) {
-                _run.Deaths++;
-                return;
-            }
-
-            Alignment alignment = player.GetAlignment();
-            Alignment deadAlignment = dead.GetAlignment();
-            if (alignment == null || deadAlignment == null || !alignment.IsFoe(deadAlignment) || dead.IsSummonedTotem()) {
-                return;
-            }
-
-            _run.Kills[(int)Classify(dead)]++;
         } catch (Exception exception) {
             Fault("stopped counting", exception);
         }
+    }
+
+    internal static void OnDying(Dying dying) {
+        if (_faulted || _run == null || _run.Kind == ZoneKind.Hub || dying == null || dying.unsummoned) {
+            return;
+        }
+
+        try {
+            Actor dead = dying.getActor();
+            if (dead == null) {
+                return;
+            }
+
+            Actor player = PlayerFinder.getPlayerActor();
+            if (player != null && dead.Pointer == player.Pointer) {
+                _run.Deaths++;
+            } else if (IsKill(dead)) {
+                _run.Kills[(int)Classify(dead)]++;
+            }
+        } catch (Exception exception) {
+            Fault("stopped counting", exception);
+        }
+    }
+
+    // Anything hostile to the player counts, including what enemies summon, as the game's own echo progress does; enemy
+    // totems do not, nor (checked by the callers) anything unsummoned: a minion or totem that expired.
+    private static bool IsKill(Actor dead) {
+        Actor player = PlayerFinder.getPlayerActor();
+        if (player == null || dead.Pointer == player.Pointer) {
+            return false;
+        }
+
+        Alignment alignment = player.GetAlignment();
+        Alignment deadAlignment = dead.GetAlignment();
+        return alignment != null && deadAlignment != null && alignment.IsFoe(deadAlignment) && !dead.IsSummonedTotem();
     }
 
     // One kind per kill, the most notable first: a champion is also rare, a boss may be rare too.
@@ -251,7 +291,14 @@ public sealed class MorditasTitheMod : MelonMod {
     private static void Finish() {
         ZoneRun run = _run;
         _run = null;
-        if (run == null || !run.IsEcho || !run.HasPlayer) {
+        if (run == null || !run.HasPlayer || run.Kind == ZoneKind.Hub) {
+            return;
+        }
+
+        string objective = !run.IsEcho ? string.Empty
+            : run.ObjectiveSeconds is { } done ? $", objective at {Panel.Clock(done)}" : ", objective not done";
+        MelonLogger.Msg($"{run.Kind} {run.Scene} left after {Panel.Clock(run.Seconds)}: {run.TotalKills} kills (death event saw {run.EventKills}){objective}");
+        if (!run.IsEcho) {
             return;
         }
 
@@ -259,7 +306,6 @@ public sealed class MorditasTitheMod : MelonMod {
         _sessionEchoes++;
         _sessionSeconds += run.Seconds;
         _sessionKills += run.TotalKills;
-        MelonLogger.Msg($"Echo left after {Panel.Clock(run.Seconds)}: {run.TotalKills} kills{(run.ObjectiveSeconds is { } objective ? $", objective at {Panel.Clock(objective)}" : ", objective not done")}");
         if (_recordHistory.Value) {
             Record(run);
         }
@@ -296,6 +342,15 @@ public sealed class MorditasTitheMod : MelonMod {
 
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int virtualKey);
+}
+
+// Dying.onEnter runs as any actor starts to die. It is virtual, so the game reaches it through the vtable and the detour
+// sees every call.
+[HarmonyPatch(typeof(Dying), nameof(Dying.onEnter))]
+internal static class DyingOnEnterPatch {
+    private static void Postfix(Dying __instance) {
+        MorditasTitheMod.OnDying(__instance);
+    }
 }
 
 // The panel: drawn with IMGUI, sized from the screen height so it reads the same at any resolution. Unpinned, it drags
@@ -456,14 +511,54 @@ internal static class Panel {
         }
     }
 
+    // In an echo or a combat zone: the zone under way, then the last echo and the session in brief. In a hub nothing is
+    // under way, so the last echo is shown in full instead.
     private static Row[] Rows(ZoneRun run) {
         var rows = new System.Collections.Generic.List<Row>();
+        ZoneRun last = MorditasTitheMod.LastEcho;
+        (int echoes, double seconds, int kills) = MorditasTitheMod.Session;
+        if (run.Kind == ZoneKind.Hub) {
+            if (last == null) {
+                rows.Add(new Row("No echo yet this session", _note));
+                return rows.ToArray();
+            }
+
+            rows.Add(new Row("Last echo", _note));
+            RunRows(rows, last);
+        } else {
+            RunRows(rows, run);
+            if (last != null || echoes > 0) {
+                rows.Add(new Row(null, null));
+            }
+
+            if (last != null) {
+                string lastObjective = last.ObjectiveSeconds is { } finished ? $"objective {Clock(finished)}" : "objective not done";
+                rows.Add(new Row($"Last echo  {Clock(last.Seconds)} · {lastObjective} · {last.TotalKills} kills", _note));
+            }
+        }
+
+        if (echoes > 0) {
+            if (run.Kind == ZoneKind.Hub) {
+                rows.Add(new Row(null, null));
+            }
+
+            rows.Add(new Row($"Session  {echoes} {(echoes == 1 ? "echo" : "echoes")} · {Clock(seconds / echoes)} and {kills / echoes} kills each", _note));
+        }
+
+        return rows.ToArray();
+    }
+
+    // An echo is headed by its timeline with the corruption under it, then the zone; any other zone by its name.
+    private static void RunRows(System.Collections.Generic.List<Row> rows, ZoneRun run) {
         if (run.IsEcho) {
             rows.Add(new Row(run.Timeline ?? "Echo", _heading));
-            string corruption = run.Corruption is { } value ? $"Corruption {value.ToString(CultureInfo.InvariantCulture)}" : null;
-            string where = string.Join(" · ", new[] { run.ZoneName, corruption }.Where(part => !string.IsNullOrEmpty(part)));
-            if (where.Length > 0) {
-                rows.Add(new Row(where, _note));
+            if (run.Corruption is { } corruption) {
+                string empowered = run.Empowered ? $"   <color={Html(_muted)}>Empowered</color>" : string.Empty;
+                rows.Add(new Row($"<color={Html(_blood)}>Corruption <b>{corruption.ToString(CultureInfo.InvariantCulture)}</b></color>{empowered}", _body));
+            }
+
+            if (!string.IsNullOrEmpty(run.ZoneName)) {
+                rows.Add(new Row(run.ZoneName, _note));
             }
         } else {
             rows.Add(new Row(string.IsNullOrEmpty(run.ZoneName) ? run.Scene : run.ZoneName, _heading));
@@ -484,23 +579,6 @@ internal static class Panel {
                 .Where(part => part != null));
             rows.Add(new Row(extra, _body));
         }
-
-        ZoneRun last = MorditasTitheMod.LastEcho;
-        (int echoes, double seconds, int kills) = MorditasTitheMod.Session;
-        if (last != null || echoes > 0) {
-            rows.Add(new Row(null, null));
-        }
-
-        if (last != null) {
-            string lastObjective = last.ObjectiveSeconds is { } finished ? $"objective {Clock(finished)}" : "objective not done";
-            rows.Add(new Row($"Last echo  {Clock(last.Seconds)} · {lastObjective} · {last.TotalKills} kills", _note));
-        }
-
-        if (echoes > 0) {
-            rows.Add(new Row($"Session  {echoes} {(echoes == 1 ? "echo" : "echoes")} · {Clock(seconds / echoes)} and {kills / echoes} kills each", _note));
-        }
-
-        return rows.ToArray();
     }
 
     // Unpinned: a press on the grip resizes, anywhere else on the panel moves it; the pin control toggles in both states.
@@ -629,32 +707,43 @@ internal static class Panel {
         return style;
     }
 
-    // The game's own faces, once it has loaded them: Noto Sans for text, its LastEpoch face for the name and headings.
-    // The default IMGUI font stands in until then.
+    // The game's own faces, once it has loaded them. Its Latin faces live in TextMeshPro font assets (their source fonts);
+    // the loose Font objects are fallbacks for other scripts (NotoSansArabic, NotoSansJP, ...) and are not used. The
+    // default IMGUI font stands in until then. The search stops after a minute and logs what it found once.
     private static void FindFonts() {
-        if ((_bodyFont != null && _displayFont != null) || _fontSearches >= 20 || Time.unscaledTime < _nextFontSearch) {
+        if ((_bodyFont != null && _displayFont != null) || _fontSearches >= 30 || Time.unscaledTime < _nextFontSearch) {
             return;
         }
 
         _nextFontSearch = Time.unscaledTime + 2f;
-
         _fontSearches++;
-        var fonts = Resources.FindObjectsOfTypeAll(Il2CppType.Of<Font>())
-            .Select(found => found.TryCast<Font>())
-            .Where(font => font != null && font.dynamic)
+        var fonts = Resources.FindObjectsOfTypeAll(Il2CppType.Of<TMP_FontAsset>())
+            .Select(found => found.TryCast<TMP_FontAsset>())
+            .Where(asset => asset != null && asset.sourceFontFile != null && asset.sourceFontFile.dynamic)
+            .Select(asset => asset.sourceFontFile)
+            .GroupBy(font => font.name)
+            .Select(group => group.First())
             .ToList();
-        Font body = fonts.FirstOrDefault(font => font.name.Contains("Noto", StringComparison.OrdinalIgnoreCase) && font.name.Contains("Regular", StringComparison.OrdinalIgnoreCase))
-            ?? fonts.FirstOrDefault(font => font.name.Contains("Noto", StringComparison.OrdinalIgnoreCase));
+        Font body = fonts.FirstOrDefault(font => IsLatinNoto(font.name) && font.name.Contains("Regular", StringComparison.OrdinalIgnoreCase))
+            ?? fonts.FirstOrDefault(font => IsLatinNoto(font.name));
         Font display = fonts.FirstOrDefault(font => font.name.StartsWith("LastEpoch", StringComparison.OrdinalIgnoreCase) && !font.name.Contains("Alt", StringComparison.OrdinalIgnoreCase))
             ?? fonts.FirstOrDefault(font => font.name.StartsWith("LastEpoch", StringComparison.OrdinalIgnoreCase));
-        if (body == null && display == null) {
-            return;
-        }
-
+        bool changed = (_bodyFont == null && body != null) || (_displayFont == null && display != null);
         _bodyFont ??= body;
         _displayFont ??= display;
-        _body = null;
-        MelonLogger.Msg($"Fonts: text {_bodyFont?.name ?? "default"}, display {_displayFont?.name ?? "default"} (loaded: {string.Join(", ", fonts.Select(font => font.name).Distinct())})");
+        if (changed) {
+            _body = null;
+        }
+
+        if ((_bodyFont != null && _displayFont != null) || _fontSearches >= 30) {
+            MelonLogger.Msg($"Fonts: text {_bodyFont?.name ?? "default"}, display {_displayFont?.name ?? "default"} (from {string.Join(", ", fonts.Select(font => font.name))})");
+        }
+    }
+
+    private static bool IsLatinNoto(string name) {
+        string[] scripts = ["Arabic", "Devanagari", "JP", "SC", "TC", "KR", "Thai", "Hebrew", "Mono"];
+        return name.StartsWith("NotoSans", StringComparison.OrdinalIgnoreCase)
+            && !scripts.Any(script => name.Contains(script, StringComparison.Ordinal));
     }
 
     private static void EnsureBlocker() {
@@ -702,6 +791,12 @@ internal static class Panel {
     private readonly record struct Row(string Text, GUIStyle Style);
 }
 
+internal enum ZoneKind {
+    Hub,
+    Combat,
+    Echo,
+}
+
 internal enum KillKind {
     Normal,
     Magic,
@@ -712,16 +807,20 @@ internal enum KillKind {
 }
 
 internal sealed class ZoneRun {
-    public ZoneRun(string scene) {
+    public ZoneRun(string scene, ZoneKind kind) {
         Scene = scene;
+        Kind = kind;
     }
 
     public string Scene { get; }
+    public ZoneKind Kind { get; }
+    public bool IsEcho => Kind == ZoneKind.Echo;
+    public bool LookedUpRun { get; set; }
+    public int EventKills { get; set; }
     public string ZoneName { get; set; }
     public double Seconds { get; set; }
     public bool HasPlayer { get; set; }
     public string Character { get; set; }
-    public bool IsEcho { get; set; }
     public string Timeline { get; set; }
     public int? Corruption { get; set; }
     public bool Empowered { get; set; }
