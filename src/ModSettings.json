@@ -7,7 +7,7 @@
         { "key": "Shown", "label": "Show the panel", "description": "F9 shows or hides it in game.", "group": "Panel" },
         { "key": "Pinned", "label": "Pinned", "description": "Drag the panel to move it and its corner to resize it, then pin it in game.", "group": "Panel" },
         { "key": "Opacity", "label": "Background opacity", "group": "Panel", "min": 0, "max": 1 },
-        { "key": "RecordHistory", "label": "Record each echo", "group": "History" }
+        { "key": "RecordHistory", "label": "Record each zone", "description": "Kept in UserData/MorditasTithe/history.jsonl; the debrief (F10) adds it up across sessions.", "group": "History" }
       ]
     }
   ]
