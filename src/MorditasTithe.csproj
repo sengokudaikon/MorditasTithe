@@ -25,8 +25,9 @@
     <EmbeddedResource Include="ModSettings.json" LogicalName="ModSettings.json" />
   </ItemGroup>
 
-  <!-- Local linking until the registry exists: copy the build into the game's Mods folder. -->
-  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' != 'false' And Exists('$(GamePath)')">
+  <!-- Eterra's Blessing's Mods page builds and installs the mod. -p:DeployToGame=true copies a build straight into the game's
+       Mods folder instead, where a running game holds the DLL and the app's mod library does not know the build. -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true' And Exists('$(GamePath)')">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GamePath)\Mods" />
   </Target>
 </Project>

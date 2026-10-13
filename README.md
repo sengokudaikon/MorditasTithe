@@ -70,4 +70,5 @@ the 1.5 CoreModule repair).
 dotnet build src/MorditasTithe.csproj -c Release
 ```
 
-`-p:GamePath=...` or `LAST_EPOCH_PATH` overrides the game folder; `-p:DeployToGame=false` skips the copy into `Mods`.
+`-p:GamePath=...` or `LAST_EPOCH_PATH` overrides the game folder. Eterra's Blessing's Mods page builds and installs it from
+these sources; `-p:DeployToGame=true` copies a build straight into the game's `Mods` folder instead.
