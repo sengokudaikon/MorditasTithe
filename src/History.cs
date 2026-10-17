@@ -22,16 +22,16 @@ internal static class History {
     // Bumps on every change, so what is worked out from the records is worked out again.
     internal static int Version { get; private set; }
 
-    private static string File => Path.Combine(MelonEnvironment.UserDataDirectory, "MorditasTithe", "history.jsonl");
+    private static string FilePath => Path.Combine(MelonEnvironment.UserDataDirectory, "MorditasTithe", "history.jsonl");
 
     internal static void Load() {
         try {
-            if (!System.IO.File.Exists(File)) {
+            if (!File.Exists(FilePath)) {
                 return;
             }
 
             int skipped = 0;
-            foreach (string line in System.IO.File.ReadLines(File)) {
+            foreach (string line in File.ReadLines(FilePath)) {
                 if (string.IsNullOrWhiteSpace(line)) {
                     continue;
                 }
@@ -69,7 +69,7 @@ internal static class History {
             Deaths = run.Deaths,
             Bosses = run.Bosses.Select(boss => boss with { Seconds = Math.Round(boss.Seconds, 1) }).ToList(),
         };
-        Array.Copy(run.Kills, record.Kills, record.Kills.Length);
+        record.Kills.Add(run.Kills);
         _records.Add(record);
         Version++;
         if (!persist) {
@@ -77,8 +77,8 @@ internal static class History {
         }
 
         try {
-            Directory.CreateDirectory(Path.GetDirectoryName(File)!);
-            System.IO.File.AppendAllText(File, Serialize(record) + "\n");
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            File.AppendAllText(FilePath, Serialize(record) + "\n");
         } catch (Exception exception) {
             MelonLogger.Warning($"Morditas' Tithe could not record the zone: {exception.Message}");
         }
@@ -96,14 +96,14 @@ internal static class History {
             empowered = record.Empowered,
             seconds = record.Seconds,
             objectiveSeconds = record.ObjectiveSeconds,
-            kills = record.TotalKills,
-            normal = record.Kills[(int)KillKind.Normal],
-            magic = record.Kills[(int)KillKind.Magic],
-            rare = record.Kills[(int)KillKind.Rare],
-            champion = record.Kills[(int)KillKind.Champion],
-            miniboss = record.Kills[(int)KillKind.Miniboss],
-            boss = record.Kills[(int)KillKind.Boss],
-            lizard = record.Kills[(int)KillKind.Lizard],
+            kills = record.Kills.Total,
+            normal = record.Kills[KillKind.Normal],
+            magic = record.Kills[KillKind.Magic],
+            rare = record.Kills[KillKind.Rare],
+            champion = record.Kills[KillKind.Champion],
+            miniboss = record.Kills[KillKind.Miniboss],
+            boss = record.Kills[KillKind.Boss],
+            lizard = record.Kills[KillKind.Lizard],
             deaths = record.Deaths,
             bosses = record.Bosses.Select(boss => new { name = boss.Name, seconds = boss.Seconds }),
         });
@@ -113,6 +113,8 @@ internal static class History {
         using JsonDocument document = JsonDocument.Parse(line);
         JsonElement root = document.RootElement;
         string kind = Text(root, "kind");
+        string timeline = Text(root, "timeline");
+        bool hasTimeline = !string.IsNullOrEmpty(timeline);
         var record = new ZoneRecord {
             Legacy = kind == null,
             Kind = kind != null ? Enum.Parse<ZoneKind>(kind, ignoreCase: true) : Text(root, "scene") == "M_Shade" ? ZoneKind.Boss : ZoneKind.Echo,
@@ -120,15 +122,15 @@ internal static class History {
             Character = Text(root, "character"),
             Scene = Text(root, "scene"),
             Zone = Text(root, "zone"),
-            Timeline = string.IsNullOrEmpty(Text(root, "timeline")) ? null : Text(root, "timeline"),
-            Corruption = string.IsNullOrEmpty(Text(root, "timeline")) ? null : Number(root, "corruption") is { } corruption ? (int)corruption : null,
+            Timeline = hasTimeline ? timeline : null,
+            Corruption = !hasTimeline ? null : Number(root, "corruption") is { } corruption ? (int)corruption : null,
             Empowered = root.TryGetProperty("empowered", out JsonElement empowered) && empowered.ValueKind == JsonValueKind.True,
             Seconds = Number(root, "seconds") ?? 0d,
             ObjectiveSeconds = Number(root, "objectiveSeconds"),
             Deaths = (int)(Number(root, "deaths") ?? 0d),
         };
         foreach (KillKind killKind in Enum.GetValues<KillKind>()) {
-            record.Kills[(int)killKind] = (int)(Number(root, killKind.ToString().ToLowerInvariant()) ?? 0d);
+            record.Kills[killKind] = (int)(Number(root, killKind.ToString().ToLowerInvariant()) ?? 0d);
         }
 
         if (root.TryGetProperty("bosses", out JsonElement bosses) && bosses.ValueKind == JsonValueKind.Array) {
@@ -164,10 +166,9 @@ internal sealed class ZoneRecord {
     public bool Empowered { get; init; }
     public double Seconds { get; init; }
     public double? ObjectiveSeconds { get; init; }
-    public int[] Kills { get; } = new int[Enum.GetValues<KillKind>().Length];
+    public KillCounts Kills { get; } = new();
     public int Deaths { get; init; }
     public List<BossKill> Bosses { get; init; } = [];
-    public int TotalKills => Kills.Sum();
 }
 
 // What a set of records adds up to: the echoes, the boss fights and every boss slain, by name.
@@ -198,11 +199,9 @@ internal sealed class Totals {
                 case ZoneKind.Echo:
                     Echoes++;
                     EchoSeconds += record.Seconds;
-                    EchoKills += record.TotalKills;
+                    EchoKills += record.Kills.Total;
                     EchoDeaths += record.Deaths;
-                    for (int kind = 0; kind < Kills.Length; kind++) {
-                        Kills[kind] += record.Kills[kind];
-                    }
+                    Kills.Add(record.Kills);
 
                     if (record.ObjectiveSeconds is { } objective) {
                         Objectives++;
@@ -212,7 +211,7 @@ internal sealed class Totals {
                         }
                     }
 
-                    if (MostKills == null || record.TotalKills > MostKills.TotalKills) {
+                    if (MostKills == null || record.Kills.Total > MostKills.Kills.Total) {
                         MostKills = record;
                     }
 
@@ -232,7 +231,7 @@ internal sealed class Totals {
                     break;
                 default:
                     OtherZones++;
-                    OtherKills += record.TotalKills;
+                    OtherKills += record.Kills.Total;
                     break;
             }
         }
@@ -245,7 +244,7 @@ internal sealed class Totals {
     public double EchoSeconds { get; }
     public int EchoKills { get; }
     public int EchoDeaths { get; }
-    public int[] Kills { get; } = new int[Enum.GetValues<KillKind>().Length];
+    public KillCounts Kills { get; } = new();
     public int Objectives { get; }
     public double ObjectiveSeconds { get; }
     public ZoneRecord FastestObjective { get; }
@@ -266,5 +265,3 @@ internal sealed class BossTally(string name) {
     public bool Endgame { get; set; }
     public double? Fastest { get; set; }
 }
-
-internal readonly record struct BossKill(string Name, double Seconds);

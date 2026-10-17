@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>MorditasTithe</AssemblyName>
     <RootNamespace>MorditasTithe</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
   </PropertyGroup>
 
   <!-- Loader and game assemblies come from the install; they are never copied or committed. -->
@@ -20,12 +20,12 @@
     <Reference Include="$(Il2CppAssembliesPath)\Il2CppLE.dll" Private="false" />
   </ItemGroup>
 
-  <!-- How Eterra's Blessing shows the settings: read from the DLL, so it travels with the mod. -->
+  <!-- How Eterra's Gift shows the settings: read from the DLL, so it travels with the mod. -->
   <ItemGroup>
     <EmbeddedResource Include="ModSettings.json" LogicalName="ModSettings.json" />
   </ItemGroup>
 
-  <!-- Eterra's Blessing's Mods page builds and installs the mod. -p:DeployToGame=true copies a build straight into the game's
+  <!-- Eterra's Gift's Mods page builds and installs the mod. -p:DeployToGame=true copies a build straight into the game's
        Mods folder instead, where a running game holds the DLL and the app's mod library does not know the build. -->
   <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true' And Exists('$(GamePath)')">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GamePath)\Mods" />

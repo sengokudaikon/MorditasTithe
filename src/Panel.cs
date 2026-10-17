@@ -36,9 +36,9 @@ internal static class Panel {
     private static float _liveScale = -1f;
     private static Vector2 _livePosition = new(-1f, -1f);
 
-    private static float Unit => Screen.height / 1080f * (_liveScale > 0f ? _liveScale : MorditasTitheMod.Scale);
+    private static float Unit => Screen.height / 1080f * (_liveScale > 0f ? _liveScale : Settings.Scale);
 
-    private static Vector2 Position => _livePosition.x >= 0f ? _livePosition : MorditasTitheMod.Position;
+    private static Vector2 Position => _livePosition.x >= 0f ? _livePosition : Settings.Position;
 
     // Ends a gesture whose mouse-up IMGUI never saw (released over another window), and keeps the click area on what
     // takes clicks: the whole panel, or once pinned its caption controls.
@@ -53,12 +53,12 @@ internal static class Panel {
             return;
         }
 
-        Ui.ClickArea(_clickSlot, MorditasTitheMod.Pinned ? Rect.MinMaxRect(_debrief.xMin, _pin.yMin, _pin.xMax, _pin.yMax) : _rect);
+        Ui.ClickArea(_clickSlot, Settings.Pinned ? Rect.MinMaxRect(_debrief.xMin, _pin.yMin, _pin.xMax, _pin.yMax) : _rect);
     }
 
     internal static void Draw() {
-        ZoneRun run = MorditasTitheMod.Run;
-        _visible = MorditasTitheMod.Shown && MorditasTitheMod.InGame;
+        ZoneRun run = Zones.Run;
+        _visible = Settings.Shown && MorditasTitheMod.InGame;
         if (!_visible) {
             return;
         }
@@ -109,14 +109,14 @@ internal static class Panel {
 
         Input();
 
-        Ui.Fill(_rect, new Color(Ui.Ground.r, Ui.Ground.g, Ui.Ground.b, MorditasTitheMod.Opacity));
+        Ui.Fill(_rect, new Color(Ui.Ground.r, Ui.Ground.g, Ui.Ground.b, Settings.Opacity));
         Ui.Fill(new Rect(_rect.x, _rect.y, _rect.width, Math.Max(2f, 2f * unit)), Ui.Blood);
         float top = _rect.y + padding;
         float left = _rect.x + padding;
         float inner = _rect.width - padding * 2f;
         Ui.Text(new Rect(left, top, inner, captionHeight), _name, styles.Caption);
         Ui.Control(_debrief, "DEBRIEF", Debrief.Open, styles.Control, unit);
-        Ui.Control(_pin, MorditasTitheMod.Pinned ? "PINNED" : "PIN", MorditasTitheMod.Pinned, styles.Control, unit);
+        Ui.Control(_pin, Settings.Pinned ? "PINNED" : "PIN", Settings.Pinned, styles.Control, unit);
         top += captionHeight + gap;
         foreach (Row row in rows) {
             float rowHeight = styles.Height(row.Style);
@@ -129,7 +129,7 @@ internal static class Panel {
             top += rowHeight;
         }
 
-        if (!MorditasTitheMod.Pinned) {
+        if (!Settings.Pinned) {
             Grip(unit);
         }
     }
@@ -138,7 +138,7 @@ internal static class Panel {
     // nothing is under way, so the last echo is shown in full instead.
     private static Row[] Rows(ZoneRun run, Styles styles) {
         var rows = new List<Row>();
-        ZoneRun last = MorditasTitheMod.LastEcho;
+        ZoneRun last = Zones.LastEcho;
         SessionSums session = Session();
         switch (run.Kind) {
             case ZoneKind.Hub when last == null:
@@ -156,13 +156,13 @@ internal static class Panel {
                 if (last != null) {
                     rows.Add(new Row(null, null));
                     string lastObjective = last.ObjectiveSeconds is { } finished ? $"objective {Ui.Clock(finished)}" : "objective not done";
-                    rows.Add(new Row($"Last echo  {Ui.Clock(last.Seconds)} · {lastObjective} · {last.TotalKills} kills", styles.Note));
+                    rows.Add(new Row($"Last echo  {Ui.Clock(last.Seconds)} · {lastObjective} · {last.Kills.Total} kills", styles.Note));
                 }
 
                 break;
         }
 
-        bool divided = run.Kind != ZoneKind.Echo && run.Kind != ZoneKind.Combat || last == null;
+        bool divided = run.Kind is not (ZoneKind.Echo or ZoneKind.Combat) || last == null;
         if (session.Echoes > 0) {
             if (divided) {
                 rows.Add(new Row(null, null));
@@ -202,12 +202,12 @@ internal static class Panel {
             : Ui.Tint(run.ObjectiveSeconds is { } done ? $"   objective {Ui.Clock(done)}" : "   objective open", Ui.Muted);
         rows.Add(new Row($"{Ui.Clock(run.Seconds)}{objective}", styles.Figure));
         double minutes = run.Seconds / 60d;
-        string rate = minutes >= 0.5 ? Ui.Tint($"   {run.TotalKills / minutes:0} a minute", Ui.Muted) : string.Empty;
-        rows.Add(new Row($"<b>{run.TotalKills}</b> kills{rate}", styles.Body));
-        rows.Add(new Row($"{Ui.Tint($"Magic {run.Kills[(int)KillKind.Magic]}", Ui.Magic)}   {Ui.Tint($"Rare {run.Kills[(int)KillKind.Rare]}", Ui.Rare)}   "
-            + Ui.Tint($"Champion {run.Kills[(int)KillKind.Champion]}   Boss {run.Kills[(int)KillKind.Boss]}", Ui.Unique), styles.Body));
-        int minibosses = run.Kills[(int)KillKind.Miniboss];
-        int lizards = run.Kills[(int)KillKind.Lizard];
+        string rate = minutes >= 0.5 ? Ui.Tint($"   {run.Kills.Total / minutes:0} a minute", Ui.Muted) : string.Empty;
+        rows.Add(new Row($"<b>{run.Kills.Total}</b> kills{rate}", styles.Body));
+        rows.Add(new Row($"{Ui.Tint($"Magic {run.Kills[KillKind.Magic]}", Ui.Magic)}   {Ui.Tint($"Rare {run.Kills[KillKind.Rare]}", Ui.Rare)}   "
+            + Ui.Tint($"Champion {run.Kills[KillKind.Champion]}   Boss {run.Kills[KillKind.Boss]}", Ui.Unique), styles.Body));
+        int minibosses = run.Kills[KillKind.Miniboss];
+        int lizards = run.Kills[KillKind.Lizard];
         string extra = string.Join("   ", new[] {
             minibosses > 0 ? $"Minibosses {minibosses}" : null,
             lizards > 0 ? $"Lizards {lizards}" : null,
@@ -231,7 +231,7 @@ internal static class Panel {
         }
 
         string extra = string.Join("   ", new[] {
-            run.TotalKills > run.Bosses.Count ? $"{run.TotalKills} kills" : null,
+            run.Kills.Total > run.Bosses.Count ? $"{run.Kills.Total} kills" : null,
             run.Deaths > 0 ? Ui.Tint($"Deaths {run.Deaths}", Ui.Blood) : null,
         }.Where(part => part != null));
         if (extra.Length > 0) {
@@ -261,7 +261,7 @@ internal static class Panel {
             .OrderByDescending(boss => boss.Kills)
             .ThenBy(boss => boss.Name, StringComparer.CurrentCulture)
             .ToList();
-        var sums = new SessionSums(echoes.Count, echoes.Sum(record => record.Seconds), echoes.Sum(record => record.TotalKills), bosses);
+        var sums = new SessionSums(echoes.Count, echoes.Sum(record => record.Seconds), echoes.Sum(record => record.Kills.Total), bosses);
         _session = sums;
         return sums;
     }
@@ -281,18 +281,18 @@ internal static class Panel {
 
         switch (current.type) {
             case EventType.MouseDown when current.button == 0 && _pin.Contains(mouse):
-                MorditasTitheMod.Pinned = !MorditasTitheMod.Pinned;
+                Settings.Pinned = !Settings.Pinned;
                 current.Use();
                 break;
             case EventType.MouseDown when current.button == 0 && _debrief.Contains(mouse):
                 Debrief.Toggle();
                 current.Use();
                 break;
-            case EventType.MouseDown when current.button == 0 && !MorditasTitheMod.Pinned && _rect.Contains(mouse):
+            case EventType.MouseDown when current.button == 0 && !Settings.Pinned && _rect.Contains(mouse):
                 _gesture = _grip.Contains(mouse) ? Gesture.Resize : Gesture.Move;
                 _gestureMouse = mouse;
                 _gestureStart = new Vector2(_rect.x, _rect.y);
-                _gestureScale = MorditasTitheMod.Scale;
+                _gestureScale = Settings.Scale;
                 _liveScale = _gestureScale;
                 _livePosition = new Vector2(_rect.x / Screen.width, _rect.y / Screen.height);
                 current.Use();
@@ -322,7 +322,7 @@ internal static class Panel {
 
         _gesture = Gesture.None;
         Vector2 position = _rect.width > 0f ? new Vector2(_rect.x / Screen.width, _rect.y / Screen.height) : _livePosition;
-        MorditasTitheMod.SavePlacement(position, _liveScale > 0f ? _liveScale : MorditasTitheMod.Scale);
+        Settings.SavePlacement(position, _liveScale > 0f ? _liveScale : Settings.Scale);
         _liveScale = -1f;
         _livePosition = new Vector2(-1f, -1f);
     }

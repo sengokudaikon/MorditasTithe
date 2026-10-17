@@ -56,7 +56,7 @@ internal static class Debrief {
             return;
         }
 
-        float unit = Screen.height / 1080f * Math.Clamp(MorditasTitheMod.Scale, 1f, 1.5f);
+        float unit = Screen.height / 1080f * Math.Clamp(Settings.Scale, 1f, 1.5f);
         Styles styles = Ui.StylesFor(unit);
         if (_builtVersion != History.Version || _builtAllTime != _allTime || _builtStyles != styles) {
             Build(styles);
@@ -181,13 +181,13 @@ internal static class Debrief {
         double minutes = totals.EchoSeconds / 60d;
         string rate = minutes > 0d ? $" · {totals.EchoKills / minutes:0} a minute" : string.Empty;
         rows.Add(new Row($"<b>{Ui.Count(totals.EchoKills)}</b> kills · {Ui.Count((double)totals.EchoKills / echoes)} each{rate}", styles.Body));
-        int[] kills = totals.Kills;
-        rows.Add(new Row($"{Ui.Tint($"Magic {Ui.Count(kills[(int)KillKind.Magic])}", Ui.Magic)}   {Ui.Tint($"Rare {Ui.Count(kills[(int)KillKind.Rare])}", Ui.Rare)}   "
-            + Ui.Tint($"Champion {Ui.Count(kills[(int)KillKind.Champion])}", Ui.Unique), styles.Body));
+        KillCounts kills = totals.Kills;
+        rows.Add(new Row($"{Ui.Tint($"Magic {Ui.Count(kills[KillKind.Magic])}", Ui.Magic)}   {Ui.Tint($"Rare {Ui.Count(kills[KillKind.Rare])}", Ui.Rare)}   "
+            + Ui.Tint($"Champion {Ui.Count(kills[KillKind.Champion])}", Ui.Unique), styles.Body));
         // Records from before 0.4.0 counted bosses and minibosses together, so the two are shown together.
-        string lizards = kills[(int)KillKind.Lizard] > 0 ? $"   Lizards {Ui.Count(kills[(int)KillKind.Lizard])}" : string.Empty;
-        rows.Add(new Row($"{Ui.Tint($"Bosses and minibosses {Ui.Count(kills[(int)KillKind.Boss] + kills[(int)KillKind.Miniboss])}", Ui.Unique)}{lizards}", styles.Body));
-        rows.Add(new Row($"Most in one echo {Ui.Count(totals.MostKills.TotalKills)} · {Where(totals.MostKills)}", styles.Note));
+        string lizards = kills[KillKind.Lizard] > 0 ? $"   Lizards {Ui.Count(kills[KillKind.Lizard])}" : string.Empty;
+        rows.Add(new Row($"{Ui.Tint($"Bosses and minibosses {Ui.Count(kills[KillKind.Boss] + kills[KillKind.Miniboss])}", Ui.Unique)}{lizards}", styles.Body));
+        rows.Add(new Row($"Most in one echo {Ui.Count(totals.MostKills.Kills.Total)} · {Where(totals.MostKills)}", styles.Note));
         rows.Add(new Row(null, null));
         if (totals.HighestCorruption > 0) {
             rows.Add(new Row($"Highest corruption {Ui.Tint($"<b>{totals.HighestCorruption.ToString(CultureInfo.InvariantCulture)}</b>", Ui.Blood)}", styles.Body));
