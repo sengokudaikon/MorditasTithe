@@ -40,4 +40,4 @@ Eleventh Hour Games.
 Last Epoch, its name, logo, characters (Morditas among them), game code and assets are the property of Eleventh Hour
 Games. All rights reserved. Morditas' Tithe is an unofficial fan-made mod. It is not affiliated with, endorsed, sponsored
 or approved by Eleventh Hour Games. This repository contains no game files or assets; you need your own copy of Last
-Epoch. The panel draws with the game's own fonts and colours, read from your installed game at run time.
+Epoch. The mod bundles no fonts or images: where it uses the game's fonts, it finds them in the running game.

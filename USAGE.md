@@ -16,11 +16,12 @@ Eterra's Gift's Mods page can build and install the mod for you, and shows its s
 To build it yourself you need the .NET 8 SDK or later:
 
 ```
-dotnet build src/MorditasTithe.csproj -c Release -p:GamePath="D:\SteamLibrary\steamapps\common\Last Epoch"
+dotnet build src/MorditasTithe.csproj -c Release
 ```
 
-`GamePath` is the Last Epoch folder. Leave it out to use the `LAST_EPOCH_PATH` environment variable, then
-`D:\SteamLibrary\steamapps\common\Last Epoch`. Copy `src/bin/Release/net6.0/MorditasTithe.dll` into the game's `Mods`
+The build looks for Last Epoch in Steam's default folder, `C:\Program Files (x86)\Steam\steamapps\common\Last Epoch`.
+If yours is elsewhere, set the `LAST_EPOCH_PATH` environment variable to it or add `-p:GamePath="<Last Epoch folder>"`;
+the build says so when it cannot find the game. Copy `src/bin/Release/net6.0/MorditasTithe.dll` into the game's `Mods`
 folder, or add `-p:DeployToGame=true` to the build to copy it there. Close the game first: a running game holds the DLL.
 
 Start the game. `MelonLoader/Latest.log` lists Morditas' Tithe and says whether the panel is shown.

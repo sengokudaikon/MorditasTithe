@@ -15,11 +15,17 @@
     <CheckEolTargetFramework>false</CheckEolTargetFramework>
   </PropertyGroup>
 
-  <!-- Last Epoch install with MelonLoader generated (run the game once). Override with -p:GamePath=... or the LAST_EPOCH_PATH variable. -->
+  <!-- Last Epoch install with MelonLoader generated (run the game once): -p:GamePath=..., else the LAST_EPOCH_PATH variable,
+       else Steam's default install folder. -->
   <PropertyGroup>
     <GamePath Condition="'$(GamePath)' == ''">$(LAST_EPOCH_PATH)</GamePath>
-    <GamePath Condition="'$(GamePath)' == ''">D:\SteamLibrary\steamapps\common\Last Epoch</GamePath>
+    <GamePath Condition="'$(GamePath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Last Epoch</GamePath>
     <MelonLoaderPath>$(GamePath)\MelonLoader</MelonLoaderPath>
     <Il2CppAssembliesPath>$(MelonLoaderPath)\Il2CppAssemblies</Il2CppAssembliesPath>
   </PropertyGroup>
+
+  <!-- Without the install the build would fail on every game reference; say what is missing instead. -->
+  <Target Name="CheckGamePath" BeforeTargets="ResolveAssemblyReferences" Condition="!Exists('$(Il2CppAssembliesPath)\Il2CppLE.dll')">
+    <Error Text="No Last Epoch with MelonLoader's generated assemblies at '$(GamePath)'. Install MelonLoader 0.7.x, run the game once, then set LAST_EPOCH_PATH or pass -p:GamePath=&lt;Last Epoch folder&gt;." />
+  </Target>
 </Project>

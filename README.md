@@ -22,5 +22,5 @@ records and their totals), `Panel`, `Debrief` and `Ui` (what both draw with).
   turned out to be.
 - **Clicks**: while the panel or debrief takes clicks, the area carries the game's own `UIMouseListener` on an invisible
   uGUI rectangle, so the game treats it as UI and a click on the panel does not walk your character there.
-- **Fonts**: text uses the game's Noto Sans and LastEpoch faces, taken from its TextMeshPro font assets once it has
-  loaded them; the log names what it found.
+- **Fonts**: it looks for the game's Noto Sans and LastEpoch faces in its loaded TextMeshPro font assets and uses Unity's
+  default font until (or unless) it finds them. The `Fonts:` log line names what it got.
